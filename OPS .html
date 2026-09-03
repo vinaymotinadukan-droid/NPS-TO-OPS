@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPS માંથી OPS માં સમાવેશ થયેલ શિક્ષકની માહિતિ પત્રક</title>
+    <!-- Excel Export Library -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Firebase SDK (Realtime Database Sync) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .status-bar {
+            text-align: center;
+            font-size: 14px;
+            color: #0056b3;
+            font-weight: bold;
+            margin-bottom: 15px;
+            height: 20px;
+        }
+        .table-container {
+            overflow-x: auto;
+            background: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            max-height: 70vh;
+            margin-bottom: 25px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 1300px;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #0056b3;
+            color: white;
+            position: sticky;
+            top: 0;
+            vertical-align: middle;
+            z-index: 10;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .readonly-cell {
+            background-color: #e9ecef;
+            font-weight: 500;
+            color: #495057;
+            text-align: left;
+        }
+        input[type="text"] {
+            width: 95%;
+            padding: 6px;
+            border: 1px solid #aaa;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 13px;
+        }
+        input[type="text"]:focus {
+            border-color: #0056b3;
+            outline: none;
+            background-color: #e8f0fe;
+        }
+        .btn-container {
+            text-align: center;
+            margin-top: 15px;
+            margin-bottom: 30px;
+        }
+        .btn-excel {
+            background-color: #28a745;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+            transition: 0.2s;
+        }
+        .btn-excel:hover {
+            background-color: #218838;
+            transform: translateY(-1px);
+        }
+        .setup-notice {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border: 1px solid #ffeeba;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>NPS માંથી OPS માં સમાવેશ થયેલ શિક્ષકની માહિતિ પત્રક</h2>
+    
+    <div class="setup-notice">
+        📌 <strong>ઓનલાઈન રિયલટાઇમ લાઈવ સિંક:</strong> તમામ યુઝર્સને એકસાથે ડેટા દેખાડવા માટે નીચે Script માં તમારી ફ્રી Firebase API કી ઉમેરો.
+    </div>
+
+    <div class="status-bar" id="statusBar">🌐 લાઈવ સર્વર સાથે કનેક્ટ થઈ રહ્યું છે...</div>
+
+    <div class="table-container">
+        <table id="teacherTable">
+            <thead>
+                <tr>
+                    <th>SR. NO.</th>
+                    <th>PRAN</th>
+                    <th>PPAN</th>
+                    <th>NAME OF EMPLOYEE</th>
+                    <th>OFFICE NAME/શાળાનુ નામ</th>
+                    <th>GPF NO.</th>
+                    <th>NPS TO OPS માં સમાવ્યા અંગેનો વિભાગ/ખાતા ના વડાનો હુકમ ક્રમાંક/તારીખ</th>
+                    <th>NPS TO OPS માં સમાવ્યા અંગેનો વિભાગ/ખાતા ના વડાના હુકમમાં કર્મચારીનો ક્રમ નંબર</th>
+                    <th>GPF NO. ફાળવણીનો હુકમ ક્રમાંક/તારીખ</th>
+                    <th>GPF NO. ફાળવણી કરનાર સંસ્થાનું નામ</th>
+                    <th>GPF NO. ફાળવણીનો હુકમમાં કર્મચારીનો ક્રમ નંબર</th>
+                    <th>હાલનો તાલુકો/ જિલ્લો</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+            </tbody>
+        </table>
+    </div>
+
+    <div class="btn-container">
+        <button class="btn-excel" onclick="exportToExcel()">📊 Excel ફાઈલ ડાઉનલોડ કરો</button>
+    </div>
+
+    <script>
+        // -----------------------------------------------------------------
+        // 1. FIREBASE CONFIGURATION
+        // Firebase Console (https://console.firebase.google.com) માંથી મફત પ્રોજેક્ટ બનાવી અહીં વિગતો ઉમેરો
+        // -----------------------------------------------------------------
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const dbRef = database.ref("teacher_data");
+
+        // 67 શિક્ષકોનો કાયમી ડેટા
+        const initialData = [
+            ["1", "LABANA PARVATSINH NARVARSINH", "AFVA PRA SHALA"],
+            ["2", "PATEL RAKESHKUMAR LALABHAI", "VALVAI F VARG PRA SHALA"],
+            ["3", "RANA KAMLESHKUMAR NATVARLAL", "AFVA PRA SHALA"],
+            ["4", "PATEL HIMANSHUKUMAR RAMANLAL", "KANTHAGAR PRA SHALA"],
+            ["5", "PATEL HEMANTKUMAR BHAGVANDAS", "USARA F PRA SHALA"],
+            ["6", "PATEL KAMLESHKUMAR MANSUKHBHAI", "MAHADEV F PRA SHALA"],
+            ["7", "PATEL NITINKUMAR DAHYABHAI", "MAHADEV F PRA SHALA"],
+            ["8", "PATEL KAPILABEN VASTABHAI", "PANCHMAHUDA F PRA SHALA"],
+            ["9", "MAL PRAKASHKUMAR MANGALABHAI", "SAGADAPADA PRA SHALA"],
+            ["10", "BHOI RAMESHBHAI KADVABHAI", "SAGADAPADA PRA SHALA"],
+            ["11", "DAMOR TAKHALIBEN SOMABHAI", "RANA F PRA SHALA"],
+            ["12", "PATEL TEJASHKUMAR SHANTILAL", "RANA F PRA SHAL"],
+            ["13", "PATEL DIPAKKUMAR DAHYABHAI", "MALABARIYA PRA SHALA"],
+            ["14", "MACHHAR MANIBEN MANSUKHBHAI", "NAVAGHARA F PRA SHALA"],
+            ["15", "PATEL SANGEETABEN PRAVINBHAI", "MANDALVAV PRA SHALA"],
+            ["16", "NAMA BHAVESHBHAI AMRUTLAL", "JHER PRA SHALA"],
+            ["17", "GOHIL CHHATRASINH MADHAVSINH", "MANDALVAV PRA SHALA"],
+            ["18", "PATEL DILIPKUMAR NATHABHAI", "GANTHELA PRA SHALA"],
+            ["19", "DAMOR VADILAL SHAVJIBHAI", "LALIYA KAKAR PRA SHALA"],
+            ["20", "PATEL ARUNKUMAR SHANTILAL", "DASIYA PRA SHALA"],
+            ["21", "DAMOR RAYSINGBHAI RANCHHODBHAI", "RATNAPURA (DH) PRA SHALA"],
+            ["22", "TAILOR CHIRAGKUMAR RAMESHCHANDRA", "AAMBALI PRA SHALA"],
+            ["23", "BAMANIYA MUKESHBHAI CHHATRABHAI", "KATHOLIYA PRA SHALA"],
+            ["24", "JADAV DASHARATHBHAI MAGANBHAI", "SARKHIYA PRA SHALA"],
+            ["25", "PATEL BHARATKUMAR PARSOTTAMBHAI", "SARKHIYA PRA SHALA"],
+            ["26", "THAKOR HARSHADKUMAR PARSOTTAMBHAI", "SARKHIYA PRA SHALA"],
+            ["27", "DARJI MITESHBHAI PRAVINCHANDRA", "SARKHIYA PRA SHALA"],
+            ["28", "VAJA NARESHBHAI KALUBHAI", "KOTDA PRA SHALA"],
+            ["29", "SOLANKI CHANDANSINH GUMANSINH", "LIMDI 2 PRA SHALA"],
+            ["30", "GANGARDA KANTILAL PUNJABHAI", "DHARAPURI PRA SHALA"],
+            ["31", "PATEL SNEHALKUMAR KANTILAL", "KOTDA PRA SHALA"],
+            ["32", "SHAH NEHALKUMAR CHANDRAKANT", "AMBALI PRA SHALA"],
+            ["33", "MALIVAD BHURABHAI SARTANBHAI", "VASIYA DUNGRI PRA SHALA"],
+            ["34", "PANDYA CHINMAY KANAIYALAL", "KOTHARIYA PRA SHALA"],
+            ["35", "CHAVDA MUKESHBHAI CHHATRABHAI", "DABHA CHOTARA PRA SHALA"],
+            ["36", "PAGI DILIPBHAI SHANIYABHAI", "VALUNDI PRA SHALA"],
+            ["37", "MALIVAD CHHAGANBHAI KALIYABHAI", "LIMDI 2 PRA SHALA"],
+            ["38", "SUTARIYA KISHORKUMAR PRAVINBHAI", "PIPLIYA PRA SHALA"],
+            ["39", "AMALIYAR BABUBHAI KHUMABHAI", "VALUNDI PRA SHALA"],
+            ["40", "PARMAR KALIDAS BHARATBHAI", "VALUNDI PRA SHALA"],
+            ["41", "ROHIT DHIRENKUMAR ISHWARBHAI", "GANGARDI 1 PRA SHALA"],
+            ["42", "TAVIYAD BHARATBHAI HARISINGBHAI", "PIPLIYA PRA SHALA"],
+            ["43", "MALIVAD VINODBHAI RANCHHODBHAI", "DASIYA PRA SHALA"],
+            ["44", "CHAUDHARI PARESHBHAI DEVJIBHAI", "GANGARDI 2 PRA SHALA"],
+            ["45", "BARIYA AMARSINH DHIRASINH", "RATNAPURA (DH) PRA SHALA"],
+            ["46", "RATHOD DIPAKKUMAR JETHABHAI", "KHANGELA PRA SHALA"],
+            ["47", "SUTARIYA MITESHBHAI BHAGVANDAS", "KHANGELA PRA SHALA"],
+            ["48", "PAGI MANISHABEN DAHYABHAI", "GANGARDI 2 PRA SHALA"],
+            ["49", "SUTHAR VIPULKUMAR DAHYALAL", "VASIYA DUNGRI PRA SHALA"],
+            ["50", "BHABHOR SHANTABEN MAGANBHAI", "AFVA PRA SHALA"],
+            ["51", "SADAT MUKESHBHAI CHHATRABHAI", "DASIYA PRA SHALA"],
+            ["52", "MALIVAD AMRATBHAI LALABHAI", "MAHUDEV PRA SHALA"],
+            ["53", "TAVIYAD MAHESHBHAI RAYCHANDBHAI", "KHAMBHOSAL PRA SHALA"],
+            ["54", "PALAS LAXMIBEN RAMSINH", "AFVA PRA SHALA"],
+            ["55", "SUTARIYA ARVINDBHAI AMBALAL", "CHHAPRI PRA SHALA"],
+            ["56", "VANKAR KANTILAL BHEEMABHAI", "MALABARIYA PRA SHALA"],
+            ["57", "VANKAR DINESHBHAI DAHYABHAI", "SIPATIYA PRA SHALA"],
+            ["58", "PAGI KANKUBEN AMARSINH", "AGARWADA PRA SHALA"],
+            ["59", "NAYAK SANGEETABEN RAMESHCHANDRA", "GANGARDI 2 PRA SHALA"],
+            ["60", "PATEL ALPESHKUMAR AMRUTLAL", "LALIYA KAKAR PRA SHALA"],
+            ["61", "MODIYA DINESHBHAI NATHABHAI", "PIPLIYA PRA SHALA"],
+            ["62", "PATEL MAHESHBHAI BHARATBHAI", "SARKHIYA PRA SHALA"],
+            ["63", "VAJA VIPULKUMAR KANUBHAI", "KOTDA PRA SHALA"],
+            ["64", "SOLANKI CHANDRIKABEN BABUBHAI", "DHARAPURI PRA SHALA"],
+            ["65", "PARMAR JIGAR VIJAYKUMAR", "KHANGELA PRA SHALA"],
+            ["66", "CHAUDHARI SHAILESHBHAI MANSUKHBHAI", "GANGARDI 1 PRA SHALA"],
+            ["67", "PARAGI SUMITRABEN MANABHAI", "SIPATIYA PRA SHALA"]
+        ];
+
+        const tableBody = document.getElementById("tableBody");
+        const statusBar = document.getElementById("statusBar");
+
+        function renderTableInitial() {
+            tableBody.innerHTML = "";
+            initialData.forEach((item, rowIndex) => {
+                const row = document.createElement("tr");
+
+                row.innerHTML = `
+                    <td class="readonly-cell" style="text-align:center;">${item[0]}</td>
+                    <td><input type="text" id="input_${rowIndex}_pran" data-key="${rowIndex}_pran" placeholder="PRAN" oninput="handleInput(this)"></td>
+                    <td><input type="text" id="input_${rowIndex}_ppan" data-key="${rowIndex}_ppan" placeholder="PPAN" oninput="handleInput(this)"></td>
+                    <td class="readonly-cell">${item[1]}</td>
+                    <td class="readonly-cell">${item[2]}</td>
+                    <td><input type="text" id="input_${rowIndex}_gpf_no" data-key="${rowIndex}_gpf_no" placeholder="GPF NO." oninput="handleInput(this)"></td>
+                    <td><input type="text" id="input_${rowIndex}_order_no" data-key="${rowIndex}_order_no" placeholder="હુકમ ક્રમાંક/તારીખ" oninput="handleInput(this)"></td>
+                    <td><input type="text" id="input_${rowIndex}_emp_order_no" data-key="${rowIndex}_emp_order_no" placeholder="કર્મચારી ક્રમ" oninput="handleInput(this)"></td>
+                    <td><input type="text" id="input_${rowIndex}_gpf_order_no" data-key="${rowIndex}_gpf_order_no" placeholder="GPF હુકમ ક્રમાંક" oninput="handleInput(this)"></td>
+                    <td><input type="text" id="input_${rowIndex}_org_name" data-key="${rowIndex}_org_name" placeholder="સંસ્થાનું નામ" oninput="handleInput(this)"></td>
+                    <td><input type="text" id="input_${rowIndex}_gpf_emp_sr" data-key="${rowIndex}_gpf_emp_sr" placeholder="GPF ક્રમ" oninput="handleInput(this)"></td>
+                    <td><input type="text" id="input_${rowIndex}_district" data-key="${rowIndex}_district" placeholder="તાલુકો/જિલ્લો" oninput="handleInput(this)"></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Firebase Realtime Listener (જ્યારે કોઈ પણ યુઝર ડેટા બદલે ત્યારે બધાના સ્ક્રીન પર તુરંત અપડેટ થાય)
+        dbRef.on('value', (snapshot) => {
+            const data = snapshot.val() || {};
+            for (let key in data) {
+                const inputElem = document.getElementById(`input_${key}`);
+                if (inputElem && document.activeElement !== inputElem) {
+                    inputElem.value = data[key];
+                }
+            }
+            statusBar.innerHTML = "🟢 ઓનલાઈન લાઈવ કનેક્ટેડ - તમામ યુઝરનો ડેટા રિયલટાઇમ અપડેટ થાય છે.";
+            statusBar.style.color = "#28a745";
+        });
+
+        // Input handler (માહિતી લખતા જ ક્લાઉડ સર્વર પર સેવ થશે)
+        let saveTimeout;
+        function handleInput(inputElem) {
+            statusBar.innerHTML = "⏳ સર્વર પર સેવ થઈ રહ્યું છે...";
+            statusBar.style.color = "#ff9800";
+
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                const key = inputElem.getAttribute("data-key");
+                const val = inputElem.value;
+
+                dbRef.child(key).set(val, (error) => {
+                    if (error) {
+                        statusBar.innerHTML = "❌ સેવ કરવામાં ભૂલ થઈ! (Firebase Config ચકાસો)";
+                        statusBar.style.color = "#dc3545";
+                    } else {
+                        statusBar.innerHTML = "🟢 લાઈવ સેવ થઈ ગયું! (તમામ યુઝરને દેખાશે)";
+                        statusBar.style.color = "#28a745";
+                    }
+                });
+            }, 400);
+        }
+
+        // Excel Export Function
+        function exportToExcel() {
+            const headers = [
+                "SR. NO.", "PRAN", "PPAN", "NAME OF EMPLOYEE", 
+                "OFFICE NAME/શાળાનુ નામ", "GPF NO.", 
+                "NPS TO OPS માં સમાવ્યા અંગેનો વિભાગ/ખાતા ના વડાનો હુકમ ક્રમાંક/તારીખ", 
+                "NPS TO OPS માં સમાવ્યા અંગેનો વિભાગ/ખાતા ના વડાના હુકમમાં કર્મચારીનો ક્રમ નંબર", 
+                "GPF NO. ફાળવણીનો હુકમ ક્રમાંક/તારીખ", 
+                "GPF NO. ફાળવણી કરનાર સંસ્થાનું નામ", 
+                "GPF NO. ફાળવણીનો હુકમમાં કર્મચારીનો ક્રમ નંબર", 
+                "હાલનો તાલુકો/ જિલ્લો"
+            ];
+
+            const data = [
+                ["NPS માંથી  OPS માં સમાવેશ થયેલ શિક્ષકની માહિતિ પત્રક"],
+                headers
+            ];
+
+            const rows = document.querySelectorAll("#teacherTable tbody tr");
+
+            rows.forEach(tr => {
+                const rowData = [];
+                const tds = tr.querySelectorAll("td");
+
+                rowData.push(tds[0].innerText.trim());
+                rowData.push(tds[1].querySelector("input").value.trim());
+                rowData.push(tds[2].querySelector("input").value.trim());
+                rowData.push(tds[3].innerText.trim());
+                rowData.push(tds[4].innerText.trim());
+                rowData.push(tds[5].querySelector("input").value.trim());
+                rowData.push(tds[6].querySelector("input").value.trim());
+                rowData.push(tds[7].querySelector("input").value.trim());
+                rowData.push(tds[8].querySelector("input").value.trim());
+                rowData.push(tds[9].querySelector("input").value.trim());
+                rowData.push(tds[10].querySelector("input").value.trim());
+                rowData.push(tds[11].querySelector("input").value.trim());
+
+                data.push(rowData);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Teacher_OPS_Data");
+
+            XLSX.writeFile(wb, "NPS_To_OPS_Live_Shared_Data.xlsx");
+        }
+
+        renderTableInitial();
+    </script>
+</body>
+</html>
